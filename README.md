@@ -1,5 +1,9 @@
 # charithar/oauth2-openid-connect-server
 
+[![CI](https://github.com/charithar/oauth2-openid-connect-server/actions/workflows/ci.yml/badge.svg)](https://github.com/charithar/oauth2-openid-connect-server/actions/workflows/ci.yml)
+[![PHP Version](https://img.shields.io/badge/php-%3E%3D8.1-777bb4.svg)](composer.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A framework-agnostic OpenID Connect Core 1.0 layer for [league/oauth2-server](https://oauth2.thephpleague.com/), built on PHP 8.1+, PSR-7/PSR-15, and [lcobucci/jwt](https://github.com/lcobucci/jwt) v5.
 
 This is a clean-room implementation built directly on league's own extension points, adding the OAuth2/OIDC surface (revocation, introspection, RP-Initiated Logout, response_mode, key rotation) needed for general-purpose use.
