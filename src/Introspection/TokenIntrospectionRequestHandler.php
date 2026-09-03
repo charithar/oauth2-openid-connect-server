@@ -85,9 +85,15 @@ final class TokenIntrospectionRequestHandler implements RequestHandlerInterface
      */
     private function introspectAccessToken(string $token, string $requestingClientId): ?array
     {
+        // Defensive and structurally unreachable via the one caller in
+        // handle(), which already rejects an empty token before this is
+        // called. Kept for robustness if this method is ever called from
+        // elsewhere.
+        // @codeCoverageIgnoreStart
         if ($token === '') {
             return null;
         }
+        // @codeCoverageIgnoreEnd
 
         try {
             $parsed = (new Parser(new JoseEncoder()))->parse($token);
@@ -95,9 +101,14 @@ final class TokenIntrospectionRequestHandler implements RequestHandlerInterface
             return null;
         }
 
+        // Defensive and structurally unreachable: Lcobucci\JWT\Token\Parser
+        // never returns anything but an UnencryptedToken - a JWE is
+        // rejected earlier, inside parse() itself.
+        // @codeCoverageIgnoreStart
         if (! $parsed instanceof UnencryptedToken) {
             return null;
         }
+        // @codeCoverageIgnoreEnd
 
         $audience = $parsed->claims()->get('aud', []);
         $tokenClientId = $audience[0] ?? null;

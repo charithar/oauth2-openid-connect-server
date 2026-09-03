@@ -107,6 +107,61 @@ final class IdTokenResponseTest extends TestCase
         self::assertArrayNotHasKey('id_token', $body);
     }
 
+    public function testReturnsNoIdTokenWhenUserIdentifierIsNull(): void
+    {
+        $signingKey = new FixtureSigningKey('kid-1');
+
+        $idTokenResponse = new IdTokenResponse(
+            new InMemoryUserRepository(),
+            new ClaimExtractor(StandardClaimSets::all()),
+            new InMemorySigningKeyRepository($signingKey),
+            new OidcRequestContext(),
+            'https://issuer.example.com'
+        );
+
+        $accessToken = new FixtureAccessToken();
+        $accessToken->setIdentifier('access-token-1');
+        $accessToken->setClient(new FixtureClient('client-1', 'https://client.example.com/callback'));
+        // No setUserIdentifier() call - e.g. a client_credentials-style token.
+        $accessToken->setExpiryDateTime((new DateTimeImmutable())->add(new DateInterval('PT1H')));
+        $accessToken->addScope(new FixtureScope('openid'));
+        $accessToken->setPrivateKey(new CryptKey($signingKey->getPrivateKeyContents(), null, false));
+
+        $idTokenResponse->setAccessToken($accessToken);
+
+        $body = json_decode((string) $idTokenResponse->generateHttpResponse(new Response())->getBody(), true);
+
+        self::assertArrayNotHasKey('id_token', $body);
+    }
+
+    public function testThrowsWhenUserIsNotFound(): void
+    {
+        $signingKey = new FixtureSigningKey('kid-1');
+
+        $idTokenResponse = new IdTokenResponse(
+            new InMemoryUserRepository(),
+            new ClaimExtractor(StandardClaimSets::all()),
+            new InMemorySigningKeyRepository($signingKey),
+            new OidcRequestContext(),
+            'https://issuer.example.com'
+        );
+
+        $accessToken = new FixtureAccessToken();
+        $accessToken->setIdentifier('access-token-1');
+        $accessToken->setClient(new FixtureClient('client-1', 'https://client.example.com/callback'));
+        $accessToken->setUserIdentifier('user-does-not-exist');
+        $accessToken->setExpiryDateTime((new DateTimeImmutable())->add(new DateInterval('PT1H')));
+        $accessToken->addScope(new FixtureScope('openid'));
+        $accessToken->setPrivateKey(new CryptKey($signingKey->getPrivateKeyContents(), null, false));
+
+        $idTokenResponse->setAccessToken($accessToken);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unable to find a claims-aware user');
+
+        $idTokenResponse->generateHttpResponse(new Response());
+    }
+
     public function testThrowsWhenSigningKeyAdvertisesANonRs256Algorithm(): void
     {
         $userRepository = new InMemoryUserRepository();

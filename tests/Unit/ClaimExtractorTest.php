@@ -58,4 +58,31 @@ final class ClaimExtractorTest extends TestCase
 
         self::assertSame(['name' => 'Ada'], $extracted);
     }
+
+    public function testHasClaimSetReflectsRegisteredScopes(): void
+    {
+        $extractor = new ClaimExtractor([StandardClaimSets::email()]);
+
+        self::assertTrue($extractor->hasClaimSet('email'));
+        self::assertFalse($extractor->hasClaimSet('profile'));
+    }
+
+    public function testGetClaimSetReturnsTheRegisteredSetOrNull(): void
+    {
+        $emailClaimSet = StandardClaimSets::email();
+        $extractor = new ClaimExtractor([$emailClaimSet]);
+
+        self::assertSame($emailClaimSet, $extractor->getClaimSet('email'));
+        self::assertNull($extractor->getClaimSet('profile'));
+    }
+
+    public function testAddClaimSetRegistersItAfterConstruction(): void
+    {
+        $extractor = new ClaimExtractor();
+        self::assertFalse($extractor->hasClaimSet('email'));
+
+        $extractor->addClaimSet(StandardClaimSets::email());
+
+        self::assertTrue($extractor->hasClaimSet('email'));
+    }
 }

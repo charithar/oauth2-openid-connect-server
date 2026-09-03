@@ -94,9 +94,15 @@ final class TokenRevocationRequestHandler implements RequestHandlerInterface
 
     private function revokeIfOwnedAccessToken(string $token, string $clientId): bool
     {
+        // Defensive and structurally unreachable via the one caller in
+        // handle(), which already rejects an empty token before this is
+        // called. Kept for robustness if this method is ever called from
+        // elsewhere.
+        // @codeCoverageIgnoreStart
         if ($token === '') {
             return false;
         }
+        // @codeCoverageIgnoreEnd
 
         try {
             $parsed = (new Parser(new JoseEncoder()))->parse($token);
@@ -104,9 +110,14 @@ final class TokenRevocationRequestHandler implements RequestHandlerInterface
             return false;
         }
 
+        // Defensive and structurally unreachable: Lcobucci\JWT\Token\Parser
+        // never returns anything but an UnencryptedToken - a JWE is
+        // rejected earlier, inside parse() itself.
+        // @codeCoverageIgnoreStart
         if (! $parsed instanceof UnencryptedToken) {
             return false;
         }
+        // @codeCoverageIgnoreEnd
 
         $audience = $parsed->claims()->get('aud', []);
 

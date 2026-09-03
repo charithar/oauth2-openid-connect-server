@@ -16,6 +16,13 @@ use Charithar\OpenIDConnectServer\Entities\ClaimSetInterface;
  */
 final class StandardClaimSets
 {
+    /**
+     * Static-only utility class - never actually invoked, so there's
+     * nothing meaningful for a test to exercise here beyond reflection
+     * theatre.
+     *
+     * @codeCoverageIgnore
+     */
     private function __construct()
     {
     }

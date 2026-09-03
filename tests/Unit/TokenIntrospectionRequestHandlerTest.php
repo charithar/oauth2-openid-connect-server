@@ -24,14 +24,14 @@ final class TokenIntrospectionRequestHandlerTest extends TestCase
 {
     private const ENCRYPTION_KEY = 'a-test-encryption-key-that-is-long-enough';
 
-    private function issueAccessTokenJwt(string $clientId, string $jti = 'access-token-1'): string
+    private function issueAccessTokenJwt(string $clientId, string $jti = 'access-token-1', ?DateTimeImmutable $expiry = null): string
     {
         $signingKey = new FixtureSigningKey('kid-1');
         $accessToken = new FixtureAccessToken();
         $accessToken->setIdentifier($jti);
         $accessToken->setClient(new FixtureClient($clientId, 'https://client.example.com/callback'));
         $accessToken->setUserIdentifier('user-1');
-        $accessToken->setExpiryDateTime((new DateTimeImmutable())->add(new DateInterval('PT1H')));
+        $accessToken->setExpiryDateTime($expiry ?? (new DateTimeImmutable())->add(new DateInterval('PT1H')));
         $accessToken->addScope(new FixtureScope('openid'));
         $accessToken->setPrivateKey(new CryptKey($signingKey->getPrivateKeyContents(), null, false));
 
@@ -299,5 +299,57 @@ final class TokenIntrospectionRequestHandlerTest extends TestCase
 
         self::assertTrue($body['active']);
         self::assertSame('refresh_token', $body['token_type']);
+    }
+
+    public function testExpiredAccessTokenIsInactive(): void
+    {
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'secret');
+
+        $handler = new TokenIntrospectionRequestHandler(
+            $clients,
+            new InMemoryAccessTokenRepository(),
+            new InMemoryRefreshTokenRepository(),
+            self::ENCRYPTION_KEY,
+            new ResponseFactory()
+        );
+
+        $jwt = $this->issueAccessTokenJwt('client-1', 'access-token-1', (new DateTimeImmutable())->sub(new DateInterval('PT10S')));
+
+        $response = $handler->handle(new ServerRequest(parsedBody: [
+            'token' => $jwt,
+            'client_id' => 'client-1',
+            'client_secret' => 'secret',
+        ]));
+        $body = json_decode((string) $response->getBody(), true);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertFalse($body['active']);
+    }
+
+    public function testRefreshTokenOwnedByDifferentClientIsReportedInactive(): void
+    {
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'secret');
+
+        $handler = new TokenIntrospectionRequestHandler(
+            $clients,
+            new InMemoryAccessTokenRepository(),
+            new InMemoryRefreshTokenRepository(),
+            self::ENCRYPTION_KEY,
+            new ResponseFactory()
+        );
+
+        $encrypted = $this->encryptRefreshTokenPayload('client-2', 'refresh-1');
+
+        $response = $handler->handle(new ServerRequest(parsedBody: [
+            'token' => $encrypted,
+            'token_type_hint' => 'refresh_token',
+            'client_id' => 'client-1',
+            'client_secret' => 'secret',
+        ]));
+        $body = json_decode((string) $response->getBody(), true);
+
+        self::assertFalse($body['active']);
     }
 }

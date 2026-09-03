@@ -72,9 +72,17 @@ final class LogoutRequestHandler implements RequestHandlerInterface
             return $this->responseFactory->createResponse(403);
         }
 
+        // Lcobucci\JWT\Token\Parser (constructed above, not injectable) only
+        // ever returns Token\Plain, which implements UnencryptedToken - a
+        // JWE ("enc" header) is rejected earlier, inside parse() itself. This
+        // narrows the type for static analysis and guards against a future
+        // change to that behavior; it can't be exercised by a test without
+        // mocking a Parser this class doesn't accept as a dependency.
+        // @codeCoverageIgnoreStart
         if (! $token instanceof UnencryptedToken) {
             return $this->responseFactory->createResponse(403);
         }
+        // @codeCoverageIgnoreEnd
 
         $kid = $token->headers()->get('kid', null);
         $signingKey = null;

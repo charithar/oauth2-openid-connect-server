@@ -17,10 +17,12 @@ use Charithar\OpenIDConnectServer\Tests\Fixtures\InMemoryClientRepository;
 use Charithar\OpenIDConnectServer\Tests\Fixtures\InMemoryRefreshTokenRepository;
 use Charithar\OpenIDConnectServer\Tests\Fixtures\InMemoryScopeRepository;
 use DateInterval;
+use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ServerRequest;
 use League\OAuth2\Server\CryptKey;
 use League\OAuth2\Server\Exception\OAuthServerException;
 use League\OAuth2\Server\ResponseTypes\BearerTokenResponse;
+use LogicException;
 use PHPUnit\Framework\TestCase;
 
 final class OidcAuthCodeGrantTest extends TestCase
@@ -84,7 +86,7 @@ final class OidcAuthCodeGrantTest extends TestCase
         $completionResponse = $grant->completeAuthorizationRequest($authorizationRequest);
         self::assertInstanceOf(ModeAwareRedirectResponse::class, $completionResponse);
 
-        $redirectResponse = $completionResponse->generateHttpResponse(new \Laminas\Diactoros\Response());
+        $redirectResponse = $completionResponse->generateHttpResponse(new Response());
         $location = $redirectResponse->getHeaderLine('Location');
 
         // response_mode=fragment must produce a "#", not a "?".
@@ -108,6 +110,128 @@ final class OidcAuthCodeGrantTest extends TestCase
         // IdTokenResponse::getExtraParams() to pick up in the same request.
         self::assertSame('nonce-value-123', $context->getNonce());
         self::assertSame(1700000000, $context->getAuthTime());
+    }
+
+    public function testCompleteAuthorizationRequestThrowsWithoutAUser(): void
+    {
+        $grant = $this->makeGrant();
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'test-secret');
+        $grant->setClientRepository($clients);
+        $grant->setScopeRepository(new InMemoryScopeRepository());
+
+        $authorizationRequest = $grant->validateAuthorizationRequest(new ServerRequest(queryParams: [
+            'response_type' => 'code',
+            'client_id'     => 'client-1',
+            'redirect_uri'  => 'https://client.example.com/callback',
+        ]));
+        $authorizationRequest->setAuthorizationApproved(true);
+        // setUser() deliberately not called.
+
+        $this->expectException(LogicException::class);
+
+        $grant->completeAuthorizationRequest($authorizationRequest);
+    }
+
+    public function testCompleteAuthorizationRequestFallsBackToTheClientsRegisteredRedirectUri(): void
+    {
+        $grant = $this->makeGrant();
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'test-secret');
+        $grant->setClientRepository($clients);
+        $grant->setScopeRepository(new InMemoryScopeRepository());
+
+        // No redirect_uri given - allowed since the client has exactly one registered.
+        $authorizationRequest = $grant->validateAuthorizationRequest(new ServerRequest(queryParams: [
+            'response_type' => 'code',
+            'client_id'     => 'client-1',
+        ]));
+        $authorizationRequest->setUser(new FixtureUser('user-1'));
+        $authorizationRequest->setAuthorizationApproved(true);
+
+        $response = $grant->completeAuthorizationRequest($authorizationRequest);
+        $location = $response->generateHttpResponse(new Response())->getHeaderLine('Location');
+
+        self::assertStringStartsWith('https://client.example.com/callback', $location);
+    }
+
+    public function testCompleteAuthorizationRequestThrowsAccessDeniedWhenNotApproved(): void
+    {
+        $grant = $this->makeGrant();
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'test-secret');
+        $grant->setClientRepository($clients);
+        $grant->setScopeRepository(new InMemoryScopeRepository());
+
+        $authorizationRequest = $grant->validateAuthorizationRequest(new ServerRequest(queryParams: [
+            'response_type' => 'code',
+            'client_id'     => 'client-1',
+            'redirect_uri'  => 'https://client.example.com/callback',
+        ]));
+        $authorizationRequest->setUser(new FixtureUser('user-1'));
+        // isAuthorizationApproved() defaults to false.
+
+        try {
+            $grant->completeAuthorizationRequest($authorizationRequest);
+            self::fail('Expected an OAuthServerException for the denied authorization.');
+        } catch (OAuthServerException $exception) {
+            self::assertSame('access_denied', $exception->getErrorType());
+            self::assertTrue($exception->hasRedirect());
+        }
+    }
+
+    public function testCompleteAuthorizationRequestThrowsOnJsonEncodingFailure(): void
+    {
+        $grant = $this->makeGrant();
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'test-secret');
+        $grant->setClientRepository($clients);
+        $grant->setScopeRepository(new InMemoryScopeRepository());
+
+        // An invalid-UTF-8 scope identifier makes json_encode() of the auth
+        // code payload fail once it reaches the 'scopes' array.
+        $authorizationRequest = $grant->validateAuthorizationRequest(new ServerRequest(queryParams: [
+            'response_type' => 'code',
+            'client_id'     => 'client-1',
+            'redirect_uri'  => 'https://client.example.com/callback',
+            'scope'         => "openid \xB1\x31",
+        ]));
+        $authorizationRequest->setUser(new FixtureUser('user-1'));
+        $authorizationRequest->setAuthorizationApproved(true);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('JSON encoding');
+
+        $grant->completeAuthorizationRequest($authorizationRequest);
+    }
+
+    public function testRespondToAccessTokenRequestSwallowsDecryptionFailureAndDelegatesToParent(): void
+    {
+        $context = new OidcRequestContext();
+        $grant = $this->makeGrant($context);
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'), 'test-secret');
+        $grant->setClientRepository($clients);
+        $grant->setScopeRepository(new InMemoryScopeRepository());
+
+        $tokenRequest = new ServerRequest(parsedBody: [
+            'grant_type'    => 'authorization_code',
+            'client_id'     => 'client-1',
+            'client_secret' => 'test-secret',
+            'redirect_uri'  => 'https://client.example.com/callback',
+            'code'          => 'this-is-not-a-validly-encrypted-code',
+        ]);
+
+        try {
+            $grant->respondToAccessTokenRequest($tokenRequest, new BearerTokenResponse(), new DateInterval('PT1H'));
+            self::fail('Expected an OAuthServerException for the undecryptable code.');
+        } catch (OAuthServerException) {
+            // Expected: parent::respondToAccessTokenRequest() performs the
+            // real validation and raises this once decryption fails there too.
+        }
+
+        self::assertNull($context->getNonce());
+        self::assertNull($context->getAuthTime());
     }
 
     private function makeGrant(?OidcRequestContext $context = null): OidcAuthCodeGrant
