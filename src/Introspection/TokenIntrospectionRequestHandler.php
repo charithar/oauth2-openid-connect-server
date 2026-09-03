@@ -64,6 +64,9 @@ final class TokenIntrospectionRequestHandler implements RequestHandlerInterface
 
         $client = $this->clientRepository->getClientEntity($clientId);
 
+        // $grantType is null: this isn't tied to any grant. Implementations
+        // that switch on the third argument must treat null as "just check
+        // the secret," not as an unrecognized/rejected grant.
         if ($client === null || ($client->isConfidential() && $this->clientRepository->validateClient($clientId, $clientSecret, null) === false)) {
             return $this->jsonResponse(401, ['error' => 'invalid_client']);
         }

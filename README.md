@@ -77,12 +77,18 @@ use Charithar\OpenIDConnectServer\UserInfo\UserInfoRequestHandler;
 use Charithar\OpenIDConnectServer\Logout\LogoutRequestHandler;
 use Charithar\OpenIDConnectServer\Revocation\TokenRevocationRequestHandler;
 use Charithar\OpenIDConnectServer\Introspection\TokenIntrospectionRequestHandler;
+use League\OAuth2\Server\ResourceServer;
 
 // GET /.well-known/openid-configuration
 $discoveryHandler = new DiscoveryRequestHandler($discoveryDocument, $responseFactory);
 
 // GET /.well-known/jwks.json
 $jwksHandler = new JwksRequestHandler(new JwksFactory($signingKeyRepository), $responseFactory);
+
+// UserInfoRequestHandler validates the Bearer token itself, via league's own
+// ResourceServer - construct one with the same access token repository and
+// public key your resource server / access-token validation already uses.
+$resourceServer = new ResourceServer($accessTokenRepository, $publicKey);
 
 // GET/POST /oauth2/userinfo (Bearer token)
 $userInfoHandler = new UserInfoRequestHandler($resourceServer, $userRepository, $claimExtractor, $responseFactory);
@@ -97,12 +103,14 @@ $revocationHandler = new TokenRevocationRequestHandler($clientRepository, $acces
 $introspectionHandler = new TokenIntrospectionRequestHandler($clientRepository, $accessTokenRepository, $refreshTokenRepository, $encryptionKey, $responseFactory);
 ```
 
+> **`ClientRepositoryInterface::validateClient()` note:** revocation and introspection aren't tied to any grant, so both handlers call `validateClient($clientId, $clientSecret, null)` - a `null` grant type. If your implementation switches on the third argument (e.g. to restrict a secret to specific grants), make sure it treats `null` as "just verify the secret," not as an unrecognized/rejected case.
+
 ## Interfaces you implement
 
 | Interface | Purpose |
 |---|---|
 | `Repositories\UserRepositoryInterface` | Look up a claims-bearing user by identifier |
-| `Keys\SigningKeyRepositoryInterface` | Supply one or more RSA signing keys for id_token signing and JWKS, enabling `kid` rotation |
+| `Keys\SigningKeyRepositoryInterface` | Supply one or more RSA signing keys for id_token signing and JWKS, enabling `kid` rotation (RS256 only in this version - see Limitations) |
 | `Entities\ClaimsAwareUserEntityInterface` | Your user entity: extends league's `UserEntityInterface`, adds `getClaims(): array` |
 | `Entities\ClaimsAwareClientEntityInterface` | Your client entity: extends league's `ClientEntityInterface`, adds `getPostLogoutRedirectUris(): array` |
 | `Logout\LogoutSessionHandlerInterface` | *(optional)* Hook for your own session teardown on RP-Initiated Logout |
@@ -112,6 +120,10 @@ Plus league/oauth2-server's own repository interfaces (`ClientRepositoryInterfac
 ## Not in scope (v1)
 
 Hybrid/implicit flow, id_token encryption (JWE), pairwise subject identifiers, a consent screen, dynamic client registration, and front/back-channel logout are deliberately not implemented. Authorization Code (with PKCE, via league's own support) and Refresh Token are the supported grants.
+
+## Limitations
+
+- **RS256 only.** id_tokens are always signed with RS256, and `JwksFactory` only knows how to publish RSA keys - `SigningKeyInterface::getAlgorithm()` must return `"RS256"`, and both `IdTokenResponse` and `JwksFactory` throw a clear exception otherwise rather than producing a token or JWKS entry that doesn't match what was actually used. EC (ES256/384/512) and OKP (EdDSA) keys aren't supported yet.
 
 ## Development
 

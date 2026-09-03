@@ -68,6 +68,9 @@ final class TokenRevocationRequestHandler implements RequestHandlerInterface
             return $this->errorResponse(401, 'invalid_client');
         }
 
+        // $grantType is null: this isn't tied to any grant. Implementations
+        // that switch on the third argument must treat null as "just check
+        // the secret," not as an unrecognized/rejected grant.
         if ($client->isConfidential() && $this->clientRepository->validateClient($clientId, $clientSecret, null) === false) {
             return $this->errorResponse(401, 'invalid_client');
         }

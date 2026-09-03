@@ -21,7 +21,10 @@ interface SigningKeyInterface
     public function getIdentifier(): string;
 
     /**
-     * JWA signing algorithm identifier, e.g. "RS256".
+     * JWA signing algorithm identifier. Must be "RS256" in this version -
+     * IdTokenResponse always signs with RS256 and throws if a key reports
+     * anything else, rather than let the JWKS `alg` field silently diverge
+     * from what was actually used to sign.
      *
      * @return non-empty-string
      */

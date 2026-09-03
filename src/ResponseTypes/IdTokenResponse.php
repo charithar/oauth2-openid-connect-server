@@ -70,6 +70,20 @@ class IdTokenResponse extends BearerTokenResponse
 
         $signingKey = $this->signingKeyRepository->getCurrentSigningKey();
 
+        if ($signingKey->getAlgorithm() !== 'RS256') {
+            // Signing below is hardcoded to Sha256 (RS256) - if this ever
+            // changes to pick a signer based on getAlgorithm(), remove this
+            // guard. Until then, a key that *advertises* a different
+            // algorithm (e.g. in the JWKS `alg` field) but gets signed with
+            // RS256 anyway would produce a token some relying parties can't
+            // verify - failing fast here is safer than that silent mismatch.
+            throw new RuntimeException(sprintf(
+                'IdTokenResponse only supports RS256 signing keys in this version; got "%s" for kid "%s".',
+                $signingKey->getAlgorithm(),
+                $signingKey->getIdentifier()
+            ));
+        }
+
         $builder = (new Builder(new JoseEncoder(), ChainedFormatter::default()))
             ->issuedBy($this->issuer)
             ->permittedFor($accessToken->getClient()->getIdentifier())

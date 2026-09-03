@@ -7,6 +7,7 @@ namespace Charithar\OpenIDConnectServer\Tests\Unit;
 use Charithar\OpenIDConnectServer\ClaimExtractor;
 use Charithar\OpenIDConnectServer\ClaimSets\StandardClaimSets;
 use Charithar\OpenIDConnectServer\Context\OidcRequestContext;
+use Charithar\OpenIDConnectServer\Keys\SigningKeyInterface;
 use Charithar\OpenIDConnectServer\ResponseTypes\IdTokenResponse;
 use Charithar\OpenIDConnectServer\Tests\Fixtures\FixtureAccessToken;
 use Charithar\OpenIDConnectServer\Tests\Fixtures\FixtureClient;
@@ -22,6 +23,7 @@ use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Token\Parser;
 use League\OAuth2\Server\CryptKey;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class IdTokenResponseTest extends TestCase
 {
@@ -103,5 +105,61 @@ final class IdTokenResponseTest extends TestCase
         $body = json_decode((string) $httpResponse->getBody(), true);
 
         self::assertArrayNotHasKey('id_token', $body);
+    }
+
+    public function testThrowsWhenSigningKeyAdvertisesANonRs256Algorithm(): void
+    {
+        $userRepository = new InMemoryUserRepository();
+        $userRepository->add(new FixtureUser('user-1'));
+
+        $nonRs256Key = new class () implements SigningKeyInterface {
+            public function getIdentifier(): string
+            {
+                return 'kid-1';
+            }
+
+            public function getAlgorithm(): string
+            {
+                return 'ES256';
+            }
+
+            public function getPrivateKeyContents(): string
+            {
+                return 'unused';
+            }
+
+            public function getPublicKeyContents(): string
+            {
+                return 'unused';
+            }
+
+            public function getPassphrase(): ?string
+            {
+                return null;
+            }
+        };
+
+        $idTokenResponse = new IdTokenResponse(
+            $userRepository,
+            new ClaimExtractor(StandardClaimSets::all()),
+            new InMemorySigningKeyRepository($nonRs256Key),
+            new OidcRequestContext(),
+            'https://issuer.example.com'
+        );
+
+        $accessToken = new FixtureAccessToken();
+        $accessToken->setIdentifier('access-token-1');
+        $accessToken->setClient(new FixtureClient('client-1', 'https://client.example.com/callback'));
+        $accessToken->setUserIdentifier('user-1');
+        $accessToken->setExpiryDateTime((new DateTimeImmutable())->add(new DateInterval('PT1H')));
+        $accessToken->addScope(new FixtureScope('openid'));
+        $accessToken->setPrivateKey(new CryptKey((new FixtureSigningKey('access-token-key'))->getPrivateKeyContents(), null, false));
+
+        $idTokenResponse->setAccessToken($accessToken);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('only supports RS256');
+
+        $idTokenResponse->generateHttpResponse(new Response());
     }
 }
