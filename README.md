@@ -126,3 +126,7 @@ composer cs-fix      # PHP-CS-Fixer (apply)
 ## License
 
 MIT.
+
+## Acknowledgments
+
+Inspired by [steverhoades/oauth2-openid-connect-server](https://github.com/steverhoades/oauth2-openid-connect-server), an OIDC add-on for league/oauth2-server. This library is an independent, clean-room implementation - no code is shared - built to add the OAuth2/OIDC surface and fixes needed for general-purpose use.
