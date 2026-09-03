@@ -1,6 +1,8 @@
 # charithar/oauth2-openid-connect-server
 
 [![CI](https://github.com/charithar/oauth2-openid-connect-server/actions/workflows/ci.yml/badge.svg)](https://github.com/charithar/oauth2-openid-connect-server/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/packagist/v/charithar/oauth2-openid-connect-server.svg)](https://packagist.org/packages/charithar/oauth2-openid-connect-server)
+[![Total Downloads](https://img.shields.io/packagist/dt/charithar/oauth2-openid-connect-server.svg)](https://packagist.org/packages/charithar/oauth2-openid-connect-server)
 [![PHP Version](https://img.shields.io/badge/php-%3E%3D8.1-777bb4.svg)](composer.json)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
