@@ -1,0 +1,48 @@
+{
+    "name": "charithar/oauth2-openid-connect-server",
+    "description": "Framework-agnostic OpenID Connect Core 1.0 layer for league/oauth2-server",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["oauth2", "openid-connect", "oidc", "authorization-server", "psr-15", "league"],
+    "authors": [
+        {
+            "name": "Charitha Ratnayaka"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "league/oauth2-server": "^9.1",
+        "lcobucci/jwt": "^5.3",
+        "psr/http-message": "^1.1 || ^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0",
+        "psr/http-factory": "^1.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.11",
+        "friendsofphp/php-cs-fixer": "^3.59",
+        "laminas/laminas-diactoros": "^3.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Charithar\\OpenIDConnectServer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Charithar\\OpenIDConnectServer\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse",
+        "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
