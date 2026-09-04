@@ -1,13 +1,13 @@
 # charithar/oauth2-openid-connect-server
 
-Framework-agnostic OpenID Connect Core 1.0 layer for [league/oauth2-server](https://oauth2.thephpleague.com/). PHP 8.1+, PSR-7/PSR-15, `lcobucci/jwt` v5. MIT licensed, intended for public release. See `README.md` for the user-facing API and wiring example.
+Framework-agnostic OpenID Connect Core 1.0 layer for [league/oauth2-server](https://oauth2.thephpleague.com/). PHP 8.2+, PSR-7/PSR-15, `lcobucci/jwt` v5. MIT licensed, intended for public release. See `README.md` for the user-facing API and wiring example.
 
 ## Origin and design stance
 
 This library exists because a production app (a separate, private codebase) was running `steverhoades/oauth2-openid-connect-server` on top of league/oauth2-server, hit several real bugs/gaps in it, and needed a general-purpose replacement. This is a **clean-room implementation**, not a fork or wrapper: no code is shared, interfaces are named independently, and the app's specific fixes were generalized into first-class features here rather than ported as overrides. See the README's Acknowledgments section for the credit line.
 
 Non-negotiable design constraints, decided deliberately:
-- **PHP 8.1+, no lower.** (Originally scoped for 7.4+, raised to 8.1 mid-design.)
+- **PHP 8.2+, no lower.** (Originally scoped for 7.4+, raised to 8.1 mid-design, then to 8.2 once the consuming app's own PHP 8.1 dependency constraint - `mezzio/mezzio-authentication-oauth2` requiring `league/oauth2-server ^9.1` was only satisfiable by that package's 3.0.1 release, which itself requires PHP 8.2+ - was cleared.)
 - **Interfaces only for persistence.** No Doctrine/PDO/concrete repository implementations ship in this package - consumers implement league's own repository interfaces plus this library's `Repositories\UserRepositoryInterface` and `Keys\SigningKeyRepositoryInterface`.
 - **Building blocks + PSR-15 handlers**, not just building blocks. The library ships mountable handlers for discovery, JWKS, UserInfo, RP-Initiated Logout, revocation, and introspection - not just grants/response-types - specifically to reduce integration boilerplate while staying framework-agnostic (PSR-15 is a standard, not a framework).
 - **No hybrid/implicit flow, no id_token encryption (JWE), no pairwise subject identifiers, no consent screen, no dynamic client registration, no front/back-channel logout.** Deliberately out of scope for v1. Authorization Code (+PKCE via league's own support) and Refresh Token are the only grants.
@@ -55,7 +55,7 @@ composer cs-check    # PHP-CS-Fixer, dry-run
 composer cs-fix      # PHP-CS-Fixer, apply
 ```
 
-CI (`.github/workflows/ci.yml`) runs all three across a PHP 8.1-8.4 matrix on every push/PR to `main`/`dev`, via `composer update` (no committed lockfile - this is a library, consumers resolve their own versions). Because of that, **anything used directly in this library's own source must be a direct `require`**, not relied on transitively - `lcobucci/clock` was added as a direct dependency for exactly this reason (it's used directly for `SystemClock::fromUTC()` in the Logout/Introspection handlers, but is only pulled in transitively via `league/oauth2-server`, not `lcobucci/jwt`, so a from-scratch CI resolution isn't guaranteed to keep bringing it in).
+CI (`.github/workflows/ci.yml`) runs all three across a PHP 8.2-8.4 matrix on every push/PR to `main`/`dev`, via `composer update` (no committed lockfile - this is a library, consumers resolve their own versions). Because of that, **anything used directly in this library's own source must be a direct `require`**, not relied on transitively - `lcobucci/clock` was added as a direct dependency for exactly this reason (it's used directly for `SystemClock::fromUTC()` in the Logout/Introspection handlers, but is only pulled in transitively via `league/oauth2-server`, not `lcobucci/jwt`, so a from-scratch CI resolution isn't guaranteed to keep bringing it in).
 
 ## Repo state
 

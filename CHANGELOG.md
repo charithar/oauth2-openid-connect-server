@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. This project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING:** Minimum PHP version raised from 8.1 to 8.2. CI matrix updated to 8.2-8.4.
+
 ## [1.0.0]
 
 Initial public release.
