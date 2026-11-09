@@ -4,6 +4,10 @@ All notable changes to this project are documented here. This project follows [S
 
 ## [Unreleased]
 
+### Fixed
+
+- `LogoutRequestHandler` no longer rejects an expired `id_token_hint` (403). id_tokens typically expire within minutes, so RP-Initiated Logout broke shortly after login; per RP-Initiated Logout 1.0 §2 the OP SHOULD accept them even when `exp` has passed. Signature and issuer are still verified.
+
 ### Changed
 
 - **BREAKING:** Minimum PHP version raised from 8.1 to 8.2. CI matrix updated to 8.2-8.4.
