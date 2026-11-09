@@ -12,5 +12,10 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 interface LogoutSessionHandlerInterface
 {
+    /**
+     * Called only after id_token_hint validated. $request carries the
+     * LogoutRequestHandler::ATTRIBUTE_* attributes: the validated hint, the
+     * resolved client identifier and (when present) the hint's `sub`.
+     */
     public function terminate(ServerRequestInterface $request): void;
 }
