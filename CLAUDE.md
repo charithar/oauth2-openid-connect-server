@@ -23,7 +23,7 @@ Non-negotiable design constraints, decided deliberately:
 | Claims | `ClaimExtractor`, `ClaimSets\StandardClaimSets`, `Entities\ClaimSetInterface`/`ClaimSetEntity` | Scope -> claims resolution. `ClaimExtractor::extract()` *always* strips RFC 7519 registered claim names (iss/sub/aud/exp/nbf/iat/jti) regardless of scope - this is the fix for the classic "openid scope leaks a `sub` claim that then collides with the JWT builder's own `sub`" bug, done by design rather than as a special-cased workaround. |
 | Cross-request bridging | `Context\OidcRequestContext` | See "The nonce/auth_time bridge" below. |
 | Keys | `Keys\SigningKeyInterface`, `Keys\SigningKeyRepositoryInterface` | Consumer-implemented; supports multiple simultaneously-active keys for `kid` rotation. |
-| JWKS | `Jwks\JwksFactory`, `Jwks\JwksRequestHandler` | Builds an RFC 7517 JWK Set from all active keys via `openssl_pkey_get_details()` (RSA only - no EC/OKP support yet). |
+| JWKS | `Jwks\JwksFactory`, `Jwks\JwksRequestHandler` | Builds an RFC 7517 JWK Set from all active keys via `openssl_pkey_get_details()`: RSA (`n`/`e`) and EC (`crv`/`x`/`y`, coordinates left-padded to full length). The algorithm comes from `Keys\SigningAlgorithm::fromKey()`, the same enum `IdTokenResponse` and `LogoutRequestHandler` take their signer from. |
 | Discovery | `Discovery\DiscoveryDocument`, `Discovery\DiscoveryRequestHandler` | Plain value object + PSR-15 handler. Every endpoint URL is passed in explicitly by the consumer - the library assumes no routing convention. |
 | Client auth | `ClientAuthentication\ClientCredentialsMiddleware` | Fixes league's `getBasicAuthCredentials()`, which base64-decodes an `Authorization: Basic` header and splits on `:` but never percent-decodes the parts, contrary to RFC 6749 §2.3.1. Injects corrected values into the parsed body (where league already looks first), so client_secret_post values already present are never overwritten. |
 | UserInfo | `UserInfo\UserInfoRequestHandler` | The **spec-correct**, Bearer-token-validated endpoint (via league's `ResourceServer`). A session-cookie-authenticated variant for a browser/SPA is an app-specific concern and does not belong in this library. |
@@ -45,7 +45,7 @@ league/oauth2-server 9.3's `AbstractGrant::validateRedirectUri()` throws `invali
 
 ## Testing
 
-No mocking framework is used - `tests/Fixtures/` holds small in-memory implementations of every league + this-library repository/entity interface (`InMemory*Repository`, `Fixture*`). `tests/Fixtures/keys/rsa{1,2}.key` are static, checked-in 2048-bit RSA test keys (generated once via the `openssl` CLI) - signing-key fixtures deliberately do **not** call `openssl_pkey_new()` at test time, because that call depends on an openssl.cnf being discoverable and is not reliable on every machine (this bit Windows PHP installs during development).
+No mocking framework is used - `tests/Fixtures/` holds small in-memory implementations of every league + this-library repository/entity interface (`InMemory*Repository`, `Fixture*`). `tests/Fixtures/keys/rsa{1,2}.key` (2048-bit RSA) and `ec1.key`/`ec384.key`/`ec521.key` (P-256/P-384/P-521) are static, checked-in test keys (generated once via the `openssl` CLI) - signing-key fixtures deliberately do **not** call `openssl_pkey_new()` at test time, because that call depends on an openssl.cnf being discoverable and is not reliable on every machine (this bit Windows PHP installs during development).
 
 ```bash
 composer install

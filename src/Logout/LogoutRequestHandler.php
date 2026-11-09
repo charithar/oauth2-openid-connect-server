@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Charithar\OpenIDConnectServer\Logout;
 
 use Charithar\OpenIDConnectServer\Entities\ClaimsAwareClientEntityInterface;
+use Charithar\OpenIDConnectServer\Keys\SigningAlgorithm;
 use Charithar\OpenIDConnectServer\Keys\SigningKeyRepositoryInterface;
 
 use function in_array;
@@ -14,7 +15,6 @@ use Lcobucci\Clock\SystemClock;
 use Lcobucci\JWT\Encoding\CannotDecodeContent;
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Signer\Rsa\Sha256;
 use Lcobucci\JWT\Token\InvalidTokenStructure;
 use Lcobucci\JWT\Token\Parser;
 use Lcobucci\JWT\Token\UnsupportedHeaderFound;
@@ -101,7 +101,12 @@ final class LogoutRequestHandler implements RequestHandlerInterface
         $validator = new Validator();
 
         try {
-            $validator->assert($token, new SignedWith(new Sha256(), InMemory::plainText($signingKey->getPublicKeyContents())));
+            // The signer comes from the key, not the token's `alg` header:
+            // SignedWith also rejects a token whose `alg` differs from it.
+            $validator->assert($token, new SignedWith(
+                SigningAlgorithm::fromKey($signingKey)->signer(),
+                InMemory::plainText($signingKey->getPublicKeyContents())
+            ));
             $validator->assert($token, new IssuedBy($this->issuer));
             $validator->assert($token, new StrictValidAt(SystemClock::fromUTC()));
         } catch (RequiredConstraintsViolated) {

@@ -116,7 +116,7 @@ $introspectionHandler = new TokenIntrospectionRequestHandler($clientRepository, 
 | Interface | Purpose |
 |---|---|
 | `Repositories\UserRepositoryInterface` | Look up a claims-bearing user by identifier |
-| `Keys\SigningKeyRepositoryInterface` | Supply one or more RSA signing keys for id_token signing and JWKS, enabling `kid` rotation (RS256 only in this version - see Limitations) |
+| `Keys\SigningKeyRepositoryInterface` | Supply one or more RSA or EC signing keys for id_token signing and JWKS, enabling `kid` rotation (RS256/384/512, ES256/384/512 - see Signing algorithms) |
 | `Entities\ClaimsAwareUserEntityInterface` | Your user entity: extends league's `UserEntityInterface`, adds `getClaims(): array` |
 | `Entities\ClaimsAwareClientEntityInterface` | Your client entity: extends league's `ClientEntityInterface`, adds `getPostLogoutRedirectUris(): array` |
 | `Logout\LogoutSessionHandlerInterface` | *(optional)* Hook for your own session teardown on RP-Initiated Logout |
@@ -127,9 +127,9 @@ Plus league/oauth2-server's own repository interfaces (`ClientRepositoryInterfac
 
 Hybrid/implicit flow, id_token encryption (JWE), pairwise subject identifiers, a consent screen, dynamic client registration, and front/back-channel logout are deliberately not implemented. Authorization Code (with PKCE, via league's own support) and Refresh Token are the supported grants.
 
-## Limitations
+## Signing algorithms
 
-- **RS256 only.** id_tokens are always signed with RS256, and `JwksFactory` only knows how to publish RSA keys - `SigningKeyInterface::getAlgorithm()` must return `"RS256"`, and both `IdTokenResponse` and `JwksFactory` throw a clear exception otherwise rather than producing a token or JWKS entry that doesn't match what was actually used. EC (ES256/384/512) and OKP (EdDSA) keys aren't supported yet.
+`SigningKeyInterface::getAlgorithm()` selects how id_tokens are signed and what the JWKS publishes: `RS256`/`RS384`/`RS512` for an RSA key, `ES256`/`ES384`/`ES512` for an EC key on P-256/P-384/P-521. The signer is always taken from the key, never from a token's `alg` header, so an `id_token_hint` signed with anything else is rejected. `IdTokenResponse` and `JwksFactory` throw if a key reports an unsupported algorithm or its material doesn't match it (an RSA key advertised as `ES256`, a P-256 key as `ES384`). Pass the same algorithms to `DiscoveryDocument` as `id_token_signing_alg_values_supported` (default `['RS256']`). EdDSA is not supported.
 
 ## Development
 

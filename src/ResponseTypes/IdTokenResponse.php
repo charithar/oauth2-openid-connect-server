@@ -9,13 +9,13 @@ use function array_map;
 use Charithar\OpenIDConnectServer\ClaimExtractor;
 use Charithar\OpenIDConnectServer\Context\OidcRequestContext;
 use Charithar\OpenIDConnectServer\Entities\ClaimsAwareUserEntityInterface;
+use Charithar\OpenIDConnectServer\Keys\SigningAlgorithm;
 use Charithar\OpenIDConnectServer\Keys\SigningKeyRepositoryInterface;
 use Charithar\OpenIDConnectServer\Repositories\UserRepositoryInterface;
 use DateTimeImmutable;
 use Lcobucci\JWT\Encoding\ChainedFormatter;
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Signer\Rsa\Sha256;
 use Lcobucci\JWT\Token\Builder;
 use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\ResponseTypes\BearerTokenResponse;
@@ -69,20 +69,10 @@ class IdTokenResponse extends BearerTokenResponse
         }
 
         $signingKey = $this->signingKeyRepository->getCurrentSigningKey();
-
-        if ($signingKey->getAlgorithm() !== 'RS256') {
-            // Signing below is hardcoded to Sha256 (RS256) - if this ever
-            // changes to pick a signer based on getAlgorithm(), remove this
-            // guard. Until then, a key that *advertises* a different
-            // algorithm (e.g. in the JWKS `alg` field) but gets signed with
-            // RS256 anyway would produce a token some relying parties can't
-            // verify - failing fast here is safer than that silent mismatch.
-            throw new RuntimeException(sprintf(
-                'IdTokenResponse only supports RS256 signing keys in this version; got "%s" for kid "%s".',
-                $signingKey->getAlgorithm(),
-                $signingKey->getIdentifier()
-            ));
-        }
+        // Signed with exactly the algorithm the key advertises (and the JWKS
+        // publishes as `alg`); an unsupported one throws here rather than
+        // silently producing a token relying parties can't verify.
+        $algorithm = SigningAlgorithm::fromKey($signingKey);
 
         $builder = (new Builder(new JoseEncoder(), ChainedFormatter::default()))
             ->issuedBy($this->issuer)
@@ -114,7 +104,7 @@ class IdTokenResponse extends BearerTokenResponse
         }
 
         $token = $builder->getToken(
-            new Sha256(),
+            $algorithm->signer(),
             InMemory::plainText($signingKey->getPrivateKeyContents(), $signingKey->getPassphrase() ?? '')
         );
 
