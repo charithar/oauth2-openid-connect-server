@@ -11,9 +11,17 @@ final class SpyLogoutSessionHandler implements LogoutSessionHandlerInterface
 {
     private bool $terminated = false;
 
+    private ?ServerRequestInterface $request = null;
+
     public function terminate(ServerRequestInterface $request): void
     {
         $this->terminated = true;
+        $this->request = $request;
+    }
+
+    public function terminatedWith(): ?ServerRequestInterface
+    {
+        return $this->request;
     }
 
     public function wasTerminated(): bool

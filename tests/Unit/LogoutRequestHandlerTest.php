@@ -23,6 +23,7 @@ use DateTimeImmutable;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ResponseFactory;
 use Laminas\Diactoros\ServerRequest;
+use Lcobucci\JWT\UnencryptedToken;
 use PHPUnit\Framework\TestCase;
 
 final class LogoutRequestHandlerTest extends TestCase
@@ -234,5 +235,35 @@ final class LogoutRequestHandlerTest extends TestCase
         self::assertSame(302, $response->getStatusCode());
         self::assertSame('https://client.example.com/logged-out?state=xyz', $response->getHeaderLine('Location'));
         self::assertTrue($sessionHandler->wasTerminated());
+    }
+
+    public function testSessionHandlerReceivesValidatedHintSubjectAndClient(): void
+    {
+        $signingKey = new FixtureSigningKey('kid-1');
+        $idToken = $this->issueIdToken($signingKey, 'client-1');
+
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'));
+
+        $sessionHandler = new SpyLogoutSessionHandler();
+
+        $handler = new LogoutRequestHandler(
+            $clients,
+            new InMemorySigningKeyRepository($signingKey),
+            self::ISSUER,
+            new ResponseFactory(),
+            $sessionHandler
+        );
+
+        $handler->handle(new ServerRequest(queryParams: ['id_token_hint' => $idToken]));
+
+        $request = $sessionHandler->terminatedWith();
+        self::assertNotNull($request);
+        self::assertSame('user-1', $request->getAttribute(LogoutRequestHandler::ATTRIBUTE_SUBJECT));
+        self::assertSame('client-1', $request->getAttribute(LogoutRequestHandler::ATTRIBUTE_CLIENT_ID));
+
+        $hint = $request->getAttribute(LogoutRequestHandler::ATTRIBUTE_ID_TOKEN_HINT);
+        self::assertInstanceOf(UnencryptedToken::class, $hint);
+        self::assertSame($idToken, $hint->toString());
     }
 }

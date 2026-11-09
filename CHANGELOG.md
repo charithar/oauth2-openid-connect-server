@@ -4,6 +4,10 @@ All notable changes to this project are documented here. This project follows [S
 
 ## [Unreleased]
 
+### Added
+
+- `LogoutRequestHandler` passes what the validated `id_token_hint` identified to `LogoutSessionHandlerInterface::terminate()` as request attributes (`ATTRIBUTE_ID_TOKEN_HINT`, `ATTRIBUTE_SUBJECT`, `ATTRIBUTE_CLIENT_ID`), so a session handler can e.g. revoke that user's refresh tokens for that client without a session cookie. The interface is unchanged.
+
 ### Changed
 
 - **BREAKING:** Minimum PHP version raised from 8.1 to 8.2. CI matrix updated to 8.2-8.4.

@@ -40,9 +40,29 @@ use function str_contains;
  * unregistered or missing redirect target still logs the user out (via
  * LogoutSessionHandlerInterface) but responds 200 instead of redirecting,
  * rather than becoming an open redirect.
+ *
+ * The request handed to LogoutSessionHandlerInterface::terminate() carries
+ * what the validated id_token_hint identified, as request attributes, so the
+ * session handler can act on that user/client pair (e.g. revoke their refresh
+ * tokens) even when no local session cookie reaches this endpoint.
  */
 final class LogoutRequestHandler implements RequestHandlerInterface
 {
+    /**
+     * The validated id_token_hint (Lcobucci\JWT\UnencryptedToken).
+     */
+    public const ATTRIBUTE_ID_TOKEN_HINT = 'oidc_id_token_hint';
+
+    /**
+     * `sub` of the validated id_token_hint (string), when present.
+     */
+    public const ATTRIBUTE_SUBJECT = 'oidc_logout_subject';
+
+    /**
+     * Identifier of the client resolved from the hint's `aud` (string).
+     */
+    public const ATTRIBUTE_CLIENT_ID = 'oidc_logout_client_id';
+
     /**
      * @param non-empty-string $issuer
      */
@@ -118,6 +138,15 @@ final class LogoutRequestHandler implements RequestHandlerInterface
         }
 
         if ($this->sessionHandler !== null) {
+            $request = $request
+                ->withAttribute(self::ATTRIBUTE_ID_TOKEN_HINT, $token)
+                ->withAttribute(self::ATTRIBUTE_CLIENT_ID, $client->getIdentifier());
+
+            $subject = $token->claims()->get('sub');
+            if (is_string($subject) && $subject !== '') {
+                $request = $request->withAttribute(self::ATTRIBUTE_SUBJECT, $subject);
+            }
+
             $this->sessionHandler->terminate($request);
         }
 
