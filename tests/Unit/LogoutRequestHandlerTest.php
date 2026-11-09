@@ -143,7 +143,7 @@ final class LogoutRequestHandlerTest extends TestCase
         self::assertSame(403, $response->getStatusCode());
     }
 
-    public function testExpiredIdTokenIsRejected(): void
+    public function testExpiredIdTokenHintIsAccepted(): void
     {
         $signingKey = new FixtureSigningKey('kid-1');
         $idToken = $this->issueIdToken($signingKey, 'client-1', new DateInterval('PT0S'));
@@ -151,16 +151,26 @@ final class LogoutRequestHandlerTest extends TestCase
         // Ensure it's unambiguously in the past by the time it's validated.
         sleep(1);
 
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback', true, ['https://client.example.com/logged-out']));
+
+        $sessionHandler = new SpyLogoutSessionHandler();
+
         $handler = new LogoutRequestHandler(
-            new InMemoryClientRepository(),
+            $clients,
             new InMemorySigningKeyRepository($signingKey),
             self::ISSUER,
-            new ResponseFactory()
+            new ResponseFactory(),
+            $sessionHandler
         );
 
-        $response = $handler->handle(new ServerRequest(queryParams: ['id_token_hint' => $idToken]));
+        $response = $handler->handle(new ServerRequest(queryParams: [
+            'id_token_hint' => $idToken,
+            'post_logout_redirect_uri' => 'https://client.example.com/logged-out',
+        ]));
 
-        self::assertSame(403, $response->getStatusCode());
+        self::assertSame(302, $response->getStatusCode());
+        self::assertTrue($sessionHandler->wasTerminated());
     }
 
     public function testUnknownClientIsRejected(): void

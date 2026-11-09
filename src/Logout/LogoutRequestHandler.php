@@ -10,7 +10,6 @@ use Charithar\OpenIDConnectServer\Keys\SigningKeyRepositoryInterface;
 use function in_array;
 use function is_string;
 
-use Lcobucci\Clock\SystemClock;
 use Lcobucci\JWT\Encoding\CannotDecodeContent;
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Signer\Key\InMemory;
@@ -21,7 +20,6 @@ use Lcobucci\JWT\Token\UnsupportedHeaderFound;
 use Lcobucci\JWT\UnencryptedToken;
 use Lcobucci\JWT\Validation\Constraint\IssuedBy;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
-use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 use Lcobucci\JWT\Validation\Validator;
 use League\OAuth2\Server\Repositories\ClientRepositoryInterface;
@@ -34,8 +32,8 @@ use function rawurlencode;
 use function str_contains;
 
 /**
- * OIDC RP-Initiated Logout 1.0. Validates id_token_hint (signature, issuer,
- * expiry), resolves the client from its `aud` claim, and only redirects to
+ * OIDC RP-Initiated Logout 1.0. Validates id_token_hint (signature and
+ * issuer, deliberately not expiry - see handle()), resolves the client from its `aud` claim, and only redirects to
  * a post_logout_redirect_uri that client has explicitly registered - an
  * unregistered or missing redirect target still logs the user out (via
  * LogoutSessionHandlerInterface) but responds 200 instead of redirecting,
@@ -98,12 +96,18 @@ final class LogoutRequestHandler implements RequestHandlerInterface
             return $this->responseFactory->createResponse(403);
         }
 
+        // No time-based constraint: an id_token usually expires within
+        // minutes, while logout happens whenever the user clicks it.
+        // RP-Initiated Logout 1.0 §2: "The OP SHOULD accept ID Tokens when
+        // the RP identified by the ID Token's aud claim and/or sid claim has
+        // a current session or had a recent session at the OP, even when the
+        // exp time has passed." Signature and issuer still prove the hint was
+        // issued by this OP.
         $validator = new Validator();
 
         try {
             $validator->assert($token, new SignedWith(new Sha256(), InMemory::plainText($signingKey->getPublicKeyContents())));
             $validator->assert($token, new IssuedBy($this->issuer));
-            $validator->assert($token, new StrictValidAt(SystemClock::fromUTC()));
         } catch (RequiredConstraintsViolated) {
             return $this->responseFactory->createResponse(403);
         }
