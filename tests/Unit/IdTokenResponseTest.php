@@ -7,6 +7,7 @@ namespace Charithar\OpenIDConnectServer\Tests\Unit;
 use Charithar\OpenIDConnectServer\ClaimExtractor;
 use Charithar\OpenIDConnectServer\ClaimSets\StandardClaimSets;
 use Charithar\OpenIDConnectServer\Context\OidcRequestContext;
+use Charithar\OpenIDConnectServer\Keys\SigningAlgorithm;
 use Charithar\OpenIDConnectServer\Keys\SigningKeyInterface;
 use Charithar\OpenIDConnectServer\ResponseTypes\IdTokenResponse;
 use Charithar\OpenIDConnectServer\Tests\Fixtures\FixtureAccessToken;
@@ -20,8 +21,12 @@ use DateInterval;
 use DateTimeImmutable;
 use Laminas\Diactoros\Response;
 use Lcobucci\JWT\Encoding\JoseEncoder;
+use Lcobucci\JWT\Signer\Key\InMemory;
 use Lcobucci\JWT\Token\Parser;
+use Lcobucci\JWT\Validation\Constraint\SignedWith;
+use Lcobucci\JWT\Validation\Validator;
 use League\OAuth2\Server\CryptKey;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -162,42 +167,48 @@ final class IdTokenResponseTest extends TestCase
         $idTokenResponse->generateHttpResponse(new Response());
     }
 
-    public function testThrowsWhenSigningKeyAdvertisesANonRs256Algorithm(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function algorithms(): iterable
+    {
+        foreach (SigningAlgorithm::cases() as $algorithm) {
+            yield $algorithm->value => [$algorithm->value];
+        }
+    }
+
+    #[DataProvider('algorithms')]
+    public function testSignsWithTheAlgorithmTheKeyAdvertises(string $algorithm): void
+    {
+        $signingKey = new FixtureSigningKey('kid-1', 1, $algorithm);
+
+        $token = (new Parser(new JoseEncoder()))->parse($this->issueIdToken($signingKey));
+
+        self::assertSame($algorithm, $token->headers()->get('alg'));
+        self::assertSame('kid-1', $token->headers()->get('kid'));
+        self::assertTrue((new Validator())->validate($token, new SignedWith(
+            SigningAlgorithm::from($algorithm)->signer(),
+            InMemory::plainText($signingKey->getPublicKeyContents())
+        )));
+    }
+
+    public function testThrowsWhenSigningKeyAdvertisesAnUnsupportedAlgorithm(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unsupported signing algorithm "HS256" for kid "kid-1"');
+
+        $this->issueIdToken(new FixtureSigningKey('kid-1', 1, 'HS256'));
+    }
+
+    private function issueIdToken(SigningKeyInterface $signingKey): string
     {
         $userRepository = new InMemoryUserRepository();
         $userRepository->add(new FixtureUser('user-1'));
 
-        $nonRs256Key = new class () implements SigningKeyInterface {
-            public function getIdentifier(): string
-            {
-                return 'kid-1';
-            }
-
-            public function getAlgorithm(): string
-            {
-                return 'ES256';
-            }
-
-            public function getPrivateKeyContents(): string
-            {
-                return 'unused';
-            }
-
-            public function getPublicKeyContents(): string
-            {
-                return 'unused';
-            }
-
-            public function getPassphrase(): ?string
-            {
-                return null;
-            }
-        };
-
         $idTokenResponse = new IdTokenResponse(
             $userRepository,
             new ClaimExtractor(StandardClaimSets::all()),
-            new InMemorySigningKeyRepository($nonRs256Key),
+            new InMemorySigningKeyRepository($signingKey),
             new OidcRequestContext(),
             'https://issuer.example.com'
         );
@@ -208,13 +219,14 @@ final class IdTokenResponseTest extends TestCase
         $accessToken->setUserIdentifier('user-1');
         $accessToken->setExpiryDateTime((new DateTimeImmutable())->add(new DateInterval('PT1H')));
         $accessToken->addScope(new FixtureScope('openid'));
+        // The access token itself is league's own (RSA-signed) JWT; only the
+        // id_token follows the signing key's algorithm.
         $accessToken->setPrivateKey(new CryptKey((new FixtureSigningKey('access-token-key'))->getPrivateKeyContents(), null, false));
 
         $idTokenResponse->setAccessToken($accessToken);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('only supports RS256');
+        $body = json_decode((string) $idTokenResponse->generateHttpResponse(new Response())->getBody(), true);
 
-        $idTokenResponse->generateHttpResponse(new Response());
+        return $body['id_token'];
     }
 }

@@ -4,6 +4,10 @@ All notable changes to this project are documented here. This project follows [S
 
 ## [Unreleased]
 
+### Added
+
+- RS384/RS512 and ES256/ES384/ES512 signing keys (`Keys\SigningAlgorithm`). `IdTokenResponse` signs and `LogoutRequestHandler` verifies `id_token_hint` with the algorithm the key reports; `JwksFactory` publishes EC keys as `kty: EC` with `crv`/`x`/`y`. A key whose material doesn't match its algorithm now throws instead of being published.
+
 ### Changed
 
 - **BREAKING:** Minimum PHP version raised from 8.1 to 8.2. CI matrix updated to 8.2-8.4.

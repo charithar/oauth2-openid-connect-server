@@ -48,7 +48,9 @@ final class LogoutRequestHandlerTest extends TestCase
         $accessToken->setUserIdentifier('user-1');
         $accessToken->setExpiryDateTime((new DateTimeImmutable())->add($ttl ?? new DateInterval('PT1H')));
         $accessToken->addScope(new FixtureScope('openid'));
-        $accessToken->setPrivateKey(new \League\OAuth2\Server\CryptKey($signingKey->getPrivateKeyContents(), null, false));
+        // league's access token is always RSA-signed; only the id_token
+        // follows $signingKey's algorithm.
+        $accessToken->setPrivateKey(new \League\OAuth2\Server\CryptKey((new FixtureSigningKey('access-token-key'))->getPrivateKeyContents(), null, false));
 
         $idTokenResponse->setAccessToken($accessToken);
 
@@ -126,7 +128,9 @@ final class LogoutRequestHandlerTest extends TestCase
         $accessToken->setUserIdentifier('user-1');
         $accessToken->setExpiryDateTime((new DateTimeImmutable())->add(new DateInterval('PT1H')));
         $accessToken->addScope(new FixtureScope('openid'));
-        $accessToken->setPrivateKey(new \League\OAuth2\Server\CryptKey($signingKey->getPrivateKeyContents(), null, false));
+        // league's access token is always RSA-signed; only the id_token
+        // follows $signingKey's algorithm.
+        $accessToken->setPrivateKey(new \League\OAuth2\Server\CryptKey((new FixtureSigningKey('access-token-key'))->getPrivateKeyContents(), null, false));
         $idTokenResponse->setAccessToken($accessToken);
 
         $idToken = json_decode((string) $idTokenResponse->generateHttpResponse(new Response())->getBody(), true)['id_token'];
@@ -234,5 +238,49 @@ final class LogoutRequestHandlerTest extends TestCase
         self::assertSame(302, $response->getStatusCode());
         self::assertSame('https://client.example.com/logged-out?state=xyz', $response->getHeaderLine('Location'));
         self::assertTrue($sessionHandler->wasTerminated());
+    }
+
+    public function testEs256IdTokenHintIsAccepted(): void
+    {
+        $signingKey = new FixtureSigningKey('kid-ec', 1, 'ES256');
+        $idToken = $this->issueIdToken($signingKey, 'client-1');
+
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback', true, ['https://client.example.com/logged-out']));
+
+        $handler = new LogoutRequestHandler(
+            $clients,
+            new InMemorySigningKeyRepository($signingKey),
+            self::ISSUER,
+            new ResponseFactory()
+        );
+
+        $response = $handler->handle(new ServerRequest(queryParams: [
+            'id_token_hint' => $idToken,
+            'post_logout_redirect_uri' => 'https://client.example.com/logged-out',
+        ]));
+
+        self::assertSame(302, $response->getStatusCode());
+    }
+
+    public function testIdTokenHintSignedWithADifferentAlgorithmThanItsKidIsRejected(): void
+    {
+        // Same kid, but the active key is now an ES256 one: the RS256 token
+        // must not verify, whatever its own `alg` header says.
+        $idToken = $this->issueIdToken(new FixtureSigningKey('kid-1'), 'client-1');
+
+        $clients = new InMemoryClientRepository();
+        $clients->add(new FixtureClient('client-1', 'https://client.example.com/callback'));
+
+        $handler = new LogoutRequestHandler(
+            $clients,
+            new InMemorySigningKeyRepository(new FixtureSigningKey('kid-1', 1, 'ES256')),
+            self::ISSUER,
+            new ResponseFactory()
+        );
+
+        $response = $handler->handle(new ServerRequest(queryParams: ['id_token_hint' => $idToken]));
+
+        self::assertSame(403, $response->getStatusCode());
     }
 }
